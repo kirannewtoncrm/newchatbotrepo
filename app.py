@@ -119,4 +119,10 @@ def add_lead():
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Use environment variables for configuration
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    host = os.getenv("FLASK_HOST", "0.0.0.0")
+    port = int(os.getenv("FLASK_PORT", 5000))
+
+    # Run the app with production-ready settings
+    app.run(debug=debug_mode, host=host, port=port)
