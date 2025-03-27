@@ -6,12 +6,12 @@ import requests
 from logging.handlers import RotatingFileHandler
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
-from dotenv import load_dotenv
 
-load_dotenv()
-
+# Initialize Flask App
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
+# Configure ProxyFix for IIS (corrected)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Configure CORS
 CORS(app, resources={r"/add_lead": {"origins": ["http://localhost:3000", "http://192.168.1.13:3000"]}}, supports_credentials=True)
@@ -117,3 +117,12 @@ def add_lead():
     except Exception as e:
         app.logger.exception("Unexpected error in add_lead endpoint")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+if __name__ == "__main__":
+    # Use environment variables for configuration
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    host = os.getenv("FLASK_HOST", "0.0.0.0")
+    port = int(os.getenv("FLASK_PORT", 5000))
+
+    # Run the app with production-ready settings
+    app.run(debug=debug_mode, host=host, port=port)
