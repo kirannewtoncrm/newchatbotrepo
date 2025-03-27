@@ -43,6 +43,32 @@ def validate_email(email):
     pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
     return bool(re.fullmatch(pattern, email.strip())) if email else False
 
+def extract_data_from_message(message):
+    """Extract structured data from unstructured text input."""
+    extracted_data = {
+        "Enq_Id": "12345",  # Default ID
+        "firstnm": "",
+        "email": "",
+        "mobile": ""
+    }
+
+    # Extract email
+    email_match = re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", message)
+    if email_match:
+        extracted_data["email"] = email_match.group(0)
+
+    # Extract mobile number (Indian format)
+    mobile_match = re.search(r"(\+91[\-\s]?)?[0]?(91)?[789]\d{9}", message)
+    if mobile_match:
+        extracted_data["mobile"] = mobile_match.group(0)
+
+    # Extract name (basic heuristic: look for "my name is" or similar patterns)
+    name_match = re.search(r"(my name is|I am|this is)\s+([a-zA-Z]+)", message, re.IGNORECASE)
+    if name_match:
+        extracted_data["firstnm"] = name_match.group(2).strip()
+
+    return extracted_data
+
 # Routes
 @app.route('/')
 def home():
@@ -68,19 +94,14 @@ def add_lead():
     try:
         data = request.get_json(silent=True) or {}
 
-        if not data:
-            app.logger.error("Empty request body received.")
-            return jsonify({"error": "Invalid request. No data provided"}), 400
+        if not data or "message" not in data:
+            app.logger.error("Invalid request. No message provided.")
+            return jsonify({"error": "Invalid request. No message provided"}), 400
 
-        app.logger.info(f"Incoming request data: {data}")
+        app.logger.info(f"Incoming request message: {data['message']}")
 
-        # Assigning default "Enq_Id" if missing
-        extracted_data = {
-            "Enq_Id": data.get("Enq_Id", "12345"),  # Default ID if not provided
-            "firstnm": data.get("firstnm", "").strip(),
-            "email": data.get("email", "").strip(),
-            "mobile": data.get("mobile", "").strip()
-        }
+        # Extract data from the unstructured message
+        extracted_data = extract_data_from_message(data["message"])
 
         # Validate required fields
         required_fields = ['Enq_Id', 'firstnm', 'email', 'mobile']
