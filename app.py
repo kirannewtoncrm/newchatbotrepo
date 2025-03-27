@@ -3,9 +3,14 @@ import re
 import logging
 import os
 import requests
+import openai
 from logging.handlers import RotatingFileHandler
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
+from dotenv import load_dotenv  # Import dotenv to load environment variables
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize Flask App
 app = Flask(__name__)
@@ -14,10 +19,13 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Configure CORS
-CORS(app, resources={r"/add_lead": {"origins": ["http://localhost:3000", "http://192.168.1.13:3000"]}}, supports_credentials=True)
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",")
+CORS(app, resources={r"/add_lead": {"origins": CORS_ORIGINS}}, supports_credentials=True)
 
 # Environment Variables
-NEWTON_CRM_API = os.getenv("CRM_API_URL", "https://newtonerp.in/NewtonApps/NewtonCrmAI/EnquiryDetails/AddLead")
+NEWTON_CRM_API = os.getenv("CRM_API_URL")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
 # Logging Setup
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
@@ -140,7 +148,7 @@ def add_lead():
     except Exception as e:
         app.logger.exception("Unexpected error in add_lead endpoint")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
-    
+
 if __name__ == "__main__":
     # Use environment variables for configuration
     debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
