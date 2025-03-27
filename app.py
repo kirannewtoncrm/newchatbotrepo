@@ -93,6 +93,7 @@ def add_lead():
     """Handle lead submission with validation"""
     try:
         data = request.get_json(silent=True) or {}
+        app.logger.info(f"Received payload: {data}")  # Log the entire payload
 
         if not data or "message" not in data:
             app.logger.error("Invalid request. No message provided.")
@@ -102,6 +103,7 @@ def add_lead():
 
         # Extract data from the unstructured message
         extracted_data = extract_data_from_message(data["message"])
+        app.logger.info(f"Extracted data: {extracted_data}")
 
         # Validate required fields
         required_fields = ['Enq_Id', 'firstnm', 'email', 'mobile']
@@ -138,7 +140,7 @@ def add_lead():
     except Exception as e:
         app.logger.exception("Unexpected error in add_lead endpoint")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
+    
 if __name__ == "__main__":
     # Use environment variables for configuration
     debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
