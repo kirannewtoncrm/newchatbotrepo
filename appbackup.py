@@ -53,19 +53,11 @@ def home():
         "documentation": "/docs"
     })
 
-@app.route('/add_lead', methods=['OPTIONS'])
-def handle_preflight():
-    """Handles CORS preflight requests"""
-    response = jsonify({"message": "CORS preflight successful"})
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-    return response
-
 @app.route('/add_lead', methods=['POST'])
 def add_lead():
     """Handle lead submission with validation"""
     try:
+        # Parse incoming JSON data
         data = request.get_json(silent=True) or {}
 
         if not data:
@@ -74,7 +66,7 @@ def add_lead():
 
         app.logger.info(f"Incoming request data: {data}")
 
-        # Assigning default "Enq_Id" if missing
+        # Extract and assign default values for required fields
         extracted_data = {
             "Enq_Id": data.get("Enq_Id", "12345"),  # Default ID if not provided
             "firstnm": data.get("firstnm", "").strip(),
@@ -98,6 +90,19 @@ def add_lead():
             app.logger.error(f"Invalid phone: {extracted_data['mobile']}")
             return jsonify({"error": "Invalid phone number"}), 400
 
+        # Add optional fields with default values
+        extracted_data.update({
+            "Proprty_ref": data.get("Proprty_ref", "N/A"),
+            "Descrip": data.get("Descrip", "N/A"),
+            "Budget": str(data.get("Budget", 0)),  # Ensure Budget is a string
+            "Remark": data.get("Remark", "N/A"),
+            "lastnm": data.get("lastnm", "N/A"),
+            "enqDetail": data.get("enqDetail", "N/A")
+        })
+
+        # Log the final payload
+        app.logger.info(f"Final extracted data: {extracted_data}")
+
         # API Call to Newton CRM
         try:
             headers = {"Content-Type": "application/json"}
@@ -117,7 +122,7 @@ def add_lead():
     except Exception as e:
         app.logger.exception("Unexpected error in add_lead endpoint")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
+    
 if __name__ == "__main__":
     # Use environment variables for configuration
     debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"

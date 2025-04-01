@@ -20,12 +20,18 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Configure CORS
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",")
-CORS(app, resources={r"/add_lead": {"origins": CORS_ORIGINS}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": CORS_ORIGINS}}, supports_credentials=True)
 
 # Environment Variables
-NEWTON_CRM_API = os.getenv("CRM_API_URL")
+ADD_LEAD_API_URL = os.getenv("CRM_API_URL")  # Add Lead URL
+UPDATE_LEAD_API_URL = os.getenv("CRM_UPDATE_API_URL")  # Update Lead URL
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
+
+
+if not ADD_LEAD_API_URL or not UPDATE_LEAD_API_URL:
+    app.logger.error("CRM API URLs are not properly configured in the .env file.")
+    raise ValueError("CRM API URLs are missing. Please check your .env file.")
 
 # Logging Setup
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
@@ -39,6 +45,8 @@ handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s [
 handler.setLevel(logging.INFO)
 app.logger.addHandler(handler)
 app.logger.setLevel(logging.INFO)
+app.logger.info(f"ADD_LEAD_API_URL: {ADD_LEAD_API_URL}")
+app.logger.info(f"UPDATE_LEAD_API_URL: {UPDATE_LEAD_API_URL}")
 
 # Helper Functions
 def validate_phone(phone):
@@ -71,7 +79,7 @@ def extract_data_from_message(message):
         extracted_data["mobile"] = mobile_match.group(0)
 
     # Extract name (basic heuristic: look for "my name is" or similar patterns)
-    name_match = re.search(r"(my name is|I am|this is)\s+([a-zA-Z]+)", message, re.IGNORECASE)
+    name_match = re.search(r"(my name is|I am|this is|name is|name)\s+([a-zA-Z]+)", message, re.IGNORECASE)
     if name_match:
         extracted_data["firstnm"] = name_match.group(2).strip()
 
@@ -86,15 +94,6 @@ def home():
         "version": "1.0.0",
         "documentation": "/docs"
     })
-
-@app.route('/add_lead', methods=['OPTIONS'])
-def handle_preflight():
-    """Handles CORS preflight requests"""
-    response = jsonify({"message": "CORS preflight successful"})
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-    return response
 
 @app.route('/add_lead', methods=['POST'])
 def add_lead():
@@ -132,7 +131,7 @@ def add_lead():
         # API Call to Newton CRM
         try:
             headers = {"Content-Type": "application/json"}
-            response = requests.post(NEWTON_CRM_API, json=extracted_data, headers=headers, timeout=10)
+            response = requests.post(ADD_LEAD_API_URL, json=extracted_data, headers=headers, timeout=10)
             response.raise_for_status()
 
             app.logger.info(f"CRM API Response: {response.json()}")
@@ -149,6 +148,80 @@ def add_lead():
         app.logger.exception("Unexpected error in add_lead endpoint")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
+@app.route('/update_lead', methods=['PUT'])
+def update_lead():
+    """Handle lead update with validation"""
+    try:
+        data = request.get_json(silent=True) or {}
+        app.logger.info(f"Received payload for update: {data}")  # Log the entire payload
+
+        # Validate if Enq_Id is provided
+        if not data or "Enq_Id" not in data:
+            app.logger.error("Invalid request. Enq_Id is required.")
+            return jsonify({"error": "Invalid request. Enq_Id is required"}), 400
+
+        # Extract Enq_Id and other fields to update
+        enq_id = data.get("Enq_Id")
+        update_fields = {key: value for key, value in data.items() if key != "Enq_Id"}
+
+        if not update_fields:
+            app.logger.error("No fields provided to update.")
+            return jsonify({"error": "No fields provided to update"}), 400
+
+        # Log the fields to be updated
+        app.logger.info(f"Updating lead with Enq_Id: {enq_id}, Fields: {update_fields}")
+
+        # API Call to Newton CRM for updating the lead
+        try:
+            headers = {"Content-Type": "application/json"}
+            response = requests.put(f"{UPDATE_LEAD_API_URL}/{enq_id}", json=update_fields, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            app.logger.info(f"CRM API Update Response: {response.json()}")
+            return jsonify({"message": "Lead updated successfully", "crm_response": response.json()}), response.status_code
+
+        except requests.exceptions.HTTPError as http_err:
+            app.logger.error(f"CRM API HTTP Error: {http_err.response.text}")
+            return jsonify({"error": "CRM API returned an error", "details": http_err.response.text}), http_err.response.status_code
+        except requests.exceptions.RequestException as req_err:
+            app.logger.error(f"CRM API Connection Error: {str(req_err)}")
+            return jsonify({"error": "Failed to connect to CRM system", "details": str(req_err)}), 503
+
+    except Exception as e:
+        app.logger.exception("Unexpected error in update_lead endpoint")
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+    @app.route('/chat', methods=['POST'])
+def chat():
+    """Handle chat messages and return a response."""
+    try:
+        data = request.get_json(silent=True) or {}
+        app.logger.info(f"Received chat message: {data}")
+
+        if not data or "message" not in data:
+            app.logger.error("Invalid request. No message provided.")
+            return jsonify({"error": "Invalid request. No message provided"}), 400
+
+        user_message = data["message"]
+
+        # Example: Generate a response using OpenAI API
+        try:
+            response = openai.Completion.create(
+                engine="text-davinci-003",
+                prompt=f"User: {user_message}\nBot:",
+                max_tokens=150,
+                temperature=0.7,
+            )
+            bot_response = response.choices[0].text.strip()
+            app.logger.info(f"Generated bot response: {bot_response}")
+            return jsonify({"response": bot_response}), 200
+
+        except Exception as e:
+            app.logger.error(f"Error generating response: {str(e)}")
+            return jsonify({"error": "Failed to generate response", "details": str(e)}), 500
+
+    except Exception as e:
+        app.logger.exception("Unexpected error in chat endpoint")
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
 if __name__ == "__main__":
     # Use environment variables for configuration
     debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
