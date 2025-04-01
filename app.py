@@ -174,7 +174,7 @@ def update_lead():
         # API Call to Newton CRM for updating the lead
         try:
             headers = {"Content-Type": "application/json"}
-            response = requests.put(f"{UPDATE_LEAD_API_URL}/{enq_id}", json=update_fields, headers=headers, timeout=10)
+            response = requests.put(f"{UPDATE_LEAD_API_URL}/{enq_id}", json=update_fields, headers=headers, timeout=30)
             response.raise_for_status()
 
             app.logger.info(f"CRM API Update Response: {response.json()}")
@@ -223,6 +223,15 @@ def chat():
     except Exception as e:
         app.logger.exception("Unexpected error in chat endpoint")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
+    
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+    return response
+
+
 if __name__ == "__main__":
     # Use environment variables for configuration
     debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
