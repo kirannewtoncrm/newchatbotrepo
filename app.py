@@ -190,7 +190,8 @@ def update_lead():
     except Exception as e:
         app.logger.exception("Unexpected error in update_lead endpoint")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
-    @app.route('/chat', methods=['POST'])
+    
+@app.route('/chat', methods=['POST'])
 def chat():
     """Handle chat messages and return a response."""
     try:
